@@ -1,43 +1,39 @@
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, urlencode
+from urllib.request import Request, build_opener, HTTPCookieProcessor
+from http.cookiejar import CookieJar
 import json
-import requests
 
-API = "https://paksim.xyz/psg-search.php"
 HOME = "https://paksim.xyz/"
+API  = "https://paksim.xyz/psg-search.php"
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
 
 
 def search_paksim(q):
-    s = requests.Session()
-    s.headers.update({
-        "user-agent": UA,
-        "accept": "*/*",
-        "accept-language": "en-US,en;q=0.9",
-        "x-requested-with": "XMLHttpRequest",
-        "origin": "https://paksim.xyz",
-        "referer": "https://paksim.xyz/",
-    })
+    """stdlib hi use karta hai — koi external package nahi chahiye."""
+    jar = CookieJar()
+    opener = build_opener(HTTPCookieProcessor(jar))   # cookies auto-handle
 
-    # 1) Pehle homepage hit karo → fresh PHPSESSID cookie mil jayegi (auto-save)
-    s.get(HOME, timeout=15)
+    hdrs = {
+        "User-Agent": UA,
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "X-Requested-With": "XMLHttpRequest",
+        "Origin": "https://paksim.xyz",
+        "Referer": "https://paksim.xyz/",
+    }
 
-    # 2) Ab search karo — cookie khud-ba-khud request me jayegi
-    r = s.post(API, data={"q": q}, timeout=20)
-    return r
+    # 1) fresh PHPSESSID lene ke liye homepage hit
+    opener.open(Request(HOME, headers=hdrs), timeout=15)
 
+    # 2) search POST — cookie ab jar me hai, apne aap jayegi
+    data = urlencode({"q": q}).encode()
+    hdrs["Content-Type"] = "application/x-www-form-urlencoded"
+    resp = opener.open(Request(API, data=data, headers=hdrs), timeout=25)
 
-def normalize(result):
-    """Response shape kuch bhi ho, list me convert kar deta hai."""
-    if isinstance(result, list):
-        return result
-    if isinstance(result, dict):
-        for key in ("data", "result", "records", "results"):
-            if isinstance(result.get(key), list):
-                return result[key]
-    return []
+    return resp.status, resp.read().decode("utf-8", "ignore")
 
 
 class handler(BaseHTTPRequestHandler):
@@ -58,38 +54,46 @@ class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         q = parse_qs(urlparse(self.path).query).get("q", [""])[0]
-        self.run(q, self.path)
+        self._handle(q)
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length).decode("utf-8", "ignore")
         q = parse_qs(raw).get("q", [""])[0]
-        self.run(q, self.path)
+        self._handle(q)
 
-    def run(self, q, path):
+    def _handle(self, q):
+        # HAR cheez try/except me — function kabhi crash hi nahi hoga
         if not q:
             return self._send({"ok": False, "error": "q param required"}, 400)
-
         try:
-            resp = search_paksim(q)
+            status, text = search_paksim(q)
             try:
-                result = resp.json()
-            except Exception:
-                # JSON nahi → 403/HTML/challenge aaya hoga, raw dikha do
+                result = json.loads(text)
+            except json.JSONDecodeError:
                 return self._send({
                     "ok": False,
-                    "error": "non-JSON response",
-                    "http_status": resp.status_code,
-                    "body": resp.text[:500],
+                    "error": "upstream non-JSON response",
+                    "http_status": status,
+                    "body": text[:500],
                 }, 502)
 
-            records = normalize(result)
-            out = {"ok": bool(records), "count": len(records), "records": records}
+            records = []
+            if isinstance(result, list):
+                records = result
+            elif isinstance(result, dict):
+                for k in ("data", "result", "records", "results"):
+                    if isinstance(result.get(k), list):
+                        records = result[k]
+                        break
+                else:
+                    records = [result]
 
-            # ?debug=1 lagao to raw response bhi milta hai
-            if "debug" in parse_qs(urlparse(path).query):
-                out["raw"] = result
-
-            return self._send(out)
+            return self._send({
+                "ok": bool(records),
+                "count": len(records),
+                "records": records,
+                "upstream_status": status,
+            })
         except Exception as e:
             return self._send({"ok": False, "error": str(e)}, 500)
