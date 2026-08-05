@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIM Lookup</title>
+<style>
+  body { font-family: monospace; background: #0d1117; color: #e6edf3;
+         display: flex; flex-direction: column; align-items: center; padding: 2rem 1rem; }
+  input, button { font: inherit; padding: 12px 16px; border-radius: 8px;
+                  border: 1px solid #30363d; background: #161b22; color: #e6edf3; }
+  button { background: #238636; cursor: pointer; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+          padding: 16px 20px; margin-top: 16px; min-width: 320px; max-width: 520px; }
+  .card b { color: #58a6ff; }
+  .err { color: #f85149; }
+</style>
+</head>
+<body>
+  <h2>SIM Owner Lookup</h2>
+  <div>
+    <input id="q" placeholder="03XXXXXXXXX ya CNIC (bina dash)">
+    <button onclick="go()">Search</button>
+  </div>
+  <div id="out"></div>
+<script>
+async function go() {
+  const q = document.getElementById('q').value.trim();
+  const out = document.getElementById('out');
+  out.innerHTML = 'Searching...';
+  try {
+    const r = await fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'q=' + encodeURIComponent(q)
+    });
+    const j = await r.json();
+    if (!j.ok) {
+      out.innerHTML = '<div class="card err">' + (j.error || 'No results') + '</div>';
+      return;
+    }
+    out.innerHTML = j.records.map(x =>
+      '<div class="card">' +
+      '<p><b>Number:</b> ' + (x.nbr ?? 'N/A') + '</p>' +
+      '<p><b>Name:</b> ' + (x.nam ?? 'N/A') + '</p>' +
+      '<p><b>CNIC:</b> ' + (x.cni ?? 'N/A') + '</p>' +
+      '<p><b>Address:</b> ' + (x.adr ?? 'N/A') + '</p>' +
+      '</div>'
+    ).join('');
+  } catch (e) {
+    out.innerHTML = '<div class="card err">Error: ' + e + '</div>';
+  }
+}
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+</script>
+</body>
+</html>
