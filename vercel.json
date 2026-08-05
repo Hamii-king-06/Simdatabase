@@ -1,3 +1,7 @@
-npm i -g vercel
-cd paksim-vercel
-vercel
+{
+  "functions": {
+    "api/search.py": {
+      "maxDuration": 30
+    }
+  }
+}
