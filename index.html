@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paksim GA API Client - Vercel Ready</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{--bg:#0a0a0a;--card:#111;--border:rgba(255,255,255,0.08);--accent:#22c55e;--white:#fff;--muted:rgba(255,255,255,0.6)}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif}
+body{background:var(--bg);color:var(--white);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 16px}
+.container{width:100%;max-width:600px}
+.header{text-align:center;margin-bottom:30px}
+.header h1{font-size:26px;font-weight:800;margin-bottom:8px}
+.header h1 span{color:var(--accent)}
+.header p{font-size:14px;color:var(--muted)}
+.search-box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px}
+.input-group{display:flex;gap:10px}
+input{flex:1;background:#1a1a1a;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:12px 16px;color:var(--white);font-size:16px;font-family:'JetBrains Mono',monospace;outline:none}
+input:focus{border-color:var(--accent)}
+button{background:var(--accent);color:#000;border:none;border-radius:8px;padding:0 20px;font-weight:700;cursor:pointer;transition:opacity 0.2s}
+button:hover{opacity:0.9}
+button:disabled{opacity:0.5;cursor:not-allowed}
+.results{display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+.results.active{display:block}
+.result-card{background:#161616;border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px}
+.result-card:last-child{margin-bottom:0}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:14px}
+.row:last-child{border-bottom:none}
+.label{color:var(--muted);font-weight:500}
+.value{color:var(--white);font-weight:600;font-family:'JetBrains Mono',monospace;text-align:right}
+.error-msg{color:#ef4444;text-align:center;font-size:14px;padding:10px}
+.loader{text-align:center;padding:20px;color:var(--accent);display:none}
+.loader.active{display:block}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>Paksim <span>API Client</span></h1>
+    <p>Fetch details programmatically via Vercel Serverless Function</p>
+  </div>
+
+  <div class="search-box">
+    <div class="input-group">
+      <input type="text" id="searchInput" placeholder="03001234567 or CNIC" maxlength="15">
+      <button id="searchBtn" onclick="performSearch()">Search</button>
+    </div>
+  </div>
+
+  <div class="loader" id="loader">
+    <i class="fas fa-spinner fa-spin fa-2x"></i>
+    <p style="margin-top:8px">Fetching data...</p>
+  </div>
+
+  <div class="results" id="resultsContainer"></div>
+</div>
+
+<script>
+async function performSearch() {
+  const query = document.getElementById('searchInput').value.trim();
+  const resultsContainer = document.getElementById('resultsContainer');
+  const loader = document.getElementById('loader');
+  const btn = document.getElementById('searchBtn');
+
+  if (!query) {
+    alert('Please enter a number or CNIC');
+    return;
+  }
+
+  loader.classList.add('active');
+  resultsContainer.classList.remove('active');
+  resultsContainer.innerHTML = '';
+  btn.disabled = true;
+
+  try {
+    // Calls your Vercel Serverless API endpoint
+    const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    const res = await response.json();
+
+    loader.classList.remove('active');
+    btn.disabled = false;
+
+    if (!res.ok || !res.data || res.data.length === 0) {
+      resultsContainer.innerHTML = '<div class="error-msg">No records found or API error.</div>';
+      resultsContainer.classList.add('active');
+      return;
+    }
+
+    let html = '';
+    res.data.forEach(item => {
+      html += `
+        <div class="result-card">
+          <div class="row"><span class="label">Number</span><span class="value">${item.nbr || 'N/A'}</span></div>
+          <div class="row"><span class="label">Name</span><span class="value">${item.nam || 'N/A'}</span></div>
+          <div class="row"><span class="label">CNIC</span><span class="value">${item.cni || 'N/A'}</span></div>
+          <div class="row"><span class="label">Address</span><span class="value">${item.adr || 'N/A'}</span></div>
+        </div>
+      `;
+    });
+
+    resultsContainer.innerHTML = html;
+    resultsContainer.classList.add('active');
+
+  } catch (err) {
+    loader.classList.remove('active');
+    btn.disabled = false;
+    resultsContainer.innerHTML = '<div class="error-msg">Failed to connect to backend API.</div>';
+    resultsContainer.classList.add('active');
+  }
+}
+</script>
+
+</body>
+</html>
